@@ -1,0 +1,180 @@
+.mobile-actions {
+  display: none;
+}
+
+.date-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.period-tabs {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+.period-tabs button {
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.period-tabs button.active {
+  background: var(--ink);
+  color: #fff;
+}
+.custom-dates {
+  display: flex;
+  gap: 8px;
+}
+.custom-dates label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+}
+.custom-dates input {
+  width: 135px;
+  margin: 0;
+  padding: 8px;
+}
+.export-button {
+  margin-left: auto;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: #454840;
+  background: var(--paper);
+  font-size: 10px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.form-hint {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #eef0e9;
+  --paper: #242722;
+  --line: #3b3e37;
+  --muted: #a6a99f;
+  background: #181a17;
+}
+[data-theme="dark"] body,
+[data-theme="dark"] main {
+  color: #eef0e9;
+  background: #181a17;
+}
+[data-theme="dark"] aside {
+  background: #20231f;
+  border-color: var(--line);
+}
+[data-theme="dark"] .brand,
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] .book-open {
+  color: #f4f5ef;
+}
+[data-theme="dark"] .brand i,
+[data-theme="dark"] .primary,
+[data-theme="dark"] .period-tabs button.active {
+  color: #20231f;
+  background: #eef0e9;
+}
+[data-theme="dark"] nav .active,
+[data-theme="dark"] .book-card,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .metric,
+[data-theme="dark"] .modal,
+[data-theme="dark"] .period-tabs,
+[data-theme="dark"] .export-button {
+  color: #e5e7df;
+  background: var(--paper);
+  border-color: var(--line);
+}
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] .tabs .chosen {
+  color: #eef0e9;
+  background: #20231f;
+  border-color: #41443d;
+}
+[data-theme="dark"] .tabs,
+[data-theme="dark"] .secondary {
+  color: #d5d8ce;
+  background: #31342e;
+}
+[data-theme="dark"] .summary-card {
+  background: #0f110f;
+  border: 1px solid #363a32;
+}
+[data-theme="dark"] .book-stats,
+[data-theme="dark"] .entry-row,
+[data-theme="dark"] .category,
+[data-theme="dark"] .mode-list {
+  border-color: #383b35;
+}
+[data-theme="dark"] .plan {
+  color: #cbd8c4;
+  background: #2d382b;
+}
+
+@media (max-width: 900px) {
+  .mobile-actions {
+    display: flex;
+    position: fixed;
+    z-index: 6;
+    right: 16px;
+    bottom: 16px;
+    gap: 6px;
+  }
+  .mobile-actions button {
+    border: 1px solid var(--line);
+    background: var(--paper);
+    border-radius: 20px;
+    padding: 9px 13px;
+    color: var(--ink);
+    font-size: 10px;
+    box-shadow: 0 4px 18px #2222;
+  }
+  .date-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .period-tabs {
+    overflow-x: auto;
+  }
+  .period-tabs button {
+    white-space: nowrap;
+    flex: 1;
+  }
+  .export-button {
+    margin-left: 0;
+    text-align: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .custom-dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .custom-dates label {
+    display: block;
+  }
+  .custom-dates input {
+    width: 100%;
+    margin-top: 5px;
+  }
+}

@@ -1,0 +1,357 @@
+# Daybook
+
+Daybook is a private money journal inspired by Cashbook. A user can create separate books for bank accounts, cash, cards, business spending, or a specific purpose, then record and analyse cash-in and cash-out entries.
+
+## Features
+
+- Email/password authentication with an `HttpOnly` session cookie
+- Multiple books with opening balances, currencies, icons, colours, archive, and restore
+- Cash-in and cash-out entries with categories, payment modes, dates, notes, and receipt images
+- Categories reusable for both cash-in and cash-out
+- This month, last month, last three months, and custom date filters
+- Search and filters by category, entry type, and payment mode
+- Filtered PDF reports
+- Per-book and all-book analytics
+- Persistent light and dark themes
+- Server-side authorization, integer money values, idempotency, and audit records
+
+## Technology
+
+- Frontend: React, TypeScript, and Vite
+- API: Fastify and TypeScript
+- Database: PostgreSQL 17
+- Local database runtime: Docker Compose
+- Validation: Zod
+- PDF generation: PDFKit
+
+## Local setup
+
+### 1. Install prerequisites
+
+Install:
+
+- [Node.js](https://nodejs.org/) 22 or newer
+- npm, included with Node.js
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+
+Confirm they are available:
+
+```bash
+node --version
+npm --version
+docker --version
+docker compose version
+```
+
+Start Docker Desktop before continuing.
+
+### 2. Install dependencies
+
+From the project root:
+
+```bash
+npm install
+```
+
+### 3. Configure the API
+
+Create the local environment file if it does not already exist:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+The default development configuration connects to PostgreSQL at `localhost:55432`. The password in this file is local-development-only and matches `compose.yaml`.
+
+Important values:
+
+```dotenv
+DATABASE_URL=postgres://daybook:daybook-local-only@localhost:55432/daybook
+JWT_SECRET=replace-with-a-long-random-secret-of-at-least-32-characters
+WEB_ORIGIN=http://localhost:5173
+PORT=3001
+NODE_ENV=development
+STORAGE_DIR=./data/uploads
+MAX_UPLOAD_BYTES=5000000
+```
+
+Use a unique, randomly generated `JWT_SECRET` outside local development.
+
+### 4. Start PostgreSQL
+
+```bash
+npm run db:up
+```
+
+This starts a PostgreSQL container named `noteitdown-postgres-1`. PostgreSQL listens on port `5432` inside the container and Docker exposes it as port `55432` on your computer.
+
+Check its status:
+
+```bash
+docker compose ps
+```
+
+The PostgreSQL service should show as `healthy`.
+
+### 5. Apply database migrations
+
+```bash
+npm run db:migrate
+```
+
+Migrations are applied in filename order and recorded in the `schema_migrations` table. Running the command again is safe; already-applied migrations are skipped.
+
+### 6. Start the API
+
+In the first terminal:
+
+```bash
+npm run dev:api
+```
+
+The API runs at [http://localhost:3001](http://localhost:3001). Verify it with:
+
+```bash
+curl http://localhost:3001/health
+```
+
+Expected response:
+
+```json
+{ "status": "ok" }
+```
+
+### 7. Start the frontend
+
+In a second terminal:
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+Always use `localhost` during development, not `127.0.0.1`. Cookies and CORS are configured for `http://localhost:5173`.
+
+## Daily development workflow
+
+After the initial setup, start the project with:
+
+```bash
+npm run db:up
+```
+
+Then run these in separate terminals:
+
+```bash
+npm run dev:api
+```
+
+```bash
+npm run dev
+```
+
+Docker keeps PostgreSQL data in the `daybook_postgres` volume, so stopping the container does not delete your data.
+
+Stop the local containers with:
+
+```bash
+npm run db:down
+```
+
+## Project structure
+
+```text
+.
+├── apps/api/
+│   ├── migrations/       Forward-only PostgreSQL migrations
+│   ├── scripts/          Migration runner
+│   ├── src/              Fastify API, validation, and domain logic
+│   └── test/             API integration tests
+├── docs/                 Architecture and production notes
+├── src/
+│   ├── api.ts            Typed browser API client and contracts
+│   ├── main.tsx          React application and UI components
+│   ├── styles.css        Base component and responsive styles
+│   └── theme.css         Date-filter controls, themes, and mobile actions
+├── compose.yaml          Local PostgreSQL container
+├── package.json          Commands and dependencies
+└── vite.config.ts        Frontend development server and API proxy
+```
+
+## Architecture
+
+```text
+React browser application
+          │
+          │ JSON API + secure session cookie
+          ▼
+Fastify API ───────────────► Local private receipt storage
+          │
+          ▼
+PostgreSQL Docker container
+```
+
+The workspace is the authorization boundary. Every book, category, transaction, and attachment query is checked against the authenticated user's workspace membership.
+
+The database table is still named `wallets` for migration compatibility, while the product calls these records Books. Existing data was preserved rather than copied into a replacement table.
+
+Money is stored as integer minor units. For example, ₹125.50 is stored as `12550`, avoiding floating-point rounding problems.
+
+Opening balances are system-generated ledger entries. They contribute to balances while remaining visible and auditable.
+
+## Database inspection
+
+Open PostgreSQL's interactive terminal:
+
+```bash
+docker compose exec postgres psql -U daybook -d daybook
+```
+
+Useful commands inside `psql`:
+
+```sql
+\dt
+\d wallets
+\d transactions
+
+SELECT id, email, created_at
+FROM users
+ORDER BY created_at DESC;
+
+SELECT id, name, kind, currency, archived_at
+FROM wallets
+ORDER BY created_at DESC;
+
+SELECT title, kind, amount_minor, payment_mode, occurred_at
+FROM transactions
+WHERE deleted_at IS NULL
+ORDER BY occurred_at DESC;
+```
+
+Exit with:
+
+```text
+\q
+```
+
+## Code quality and verification
+
+Format the code:
+
+```bash
+npm run format
+```
+
+Check formatting without modifying files:
+
+```bash
+npm run format:check
+```
+
+Run integration tests:
+
+```bash
+npm test
+```
+
+Build both applications:
+
+```bash
+npm run build
+npm run build:api
+```
+
+Before committing a change, run all four commands:
+
+```bash
+npm run format:check
+npm run build
+npm run build:api
+npm test
+```
+
+The integration test verifies ownership isolation, neutral categories, date filtering, idempotent entry creation, balance calculations, dashboard loading, and PDF generation.
+
+## API overview
+
+Authentication:
+
+- `POST /v1/auth/register`
+- `POST /v1/auth/login`
+- `POST /v1/auth/logout`
+- `GET /v1/auth/me`
+
+Books and analytics:
+
+- `GET /v1/workspaces/:workspaceId/dashboard`
+- `POST /v1/workspaces/:workspaceId/books`
+- `GET /v1/books/:bookId`
+- `PATCH /v1/books/:bookId`
+- `GET /v1/books/:bookId/export.pdf`
+
+Entries and categories:
+
+- `POST /v1/books/:bookId/entries`
+- `PATCH /v1/entries/:entryId`
+- `DELETE /v1/entries/:entryId`
+- `POST /v1/entries/:entryId/restore`
+- `POST /v1/workspaces/:workspaceId/categories`
+- `PATCH /v1/categories/:categoryId`
+
+Attachments:
+
+- `POST /v1/entries/:entryId/attachment`
+- `GET /v1/attachments/:attachmentId`
+- `DELETE /v1/attachments/:attachmentId`
+
+## Troubleshooting
+
+### PostgreSQL connection refused
+
+Check that Docker Desktop and the container are running:
+
+```bash
+docker compose ps
+npm run db:up
+```
+
+Confirm PostgreSQL accepts connections:
+
+```bash
+docker compose exec postgres pg_isready -U daybook -d daybook
+```
+
+Also confirm `DATABASE_URL` uses port `55432`, not `5432`.
+
+### Port already in use
+
+Check which process uses a development port:
+
+```bash
+lsof -nP -iTCP:3001 -sTCP:LISTEN
+lsof -nP -iTCP:5173 -sTCP:LISTEN
+lsof -nP -iTCP:55432 -sTCP:LISTEN
+```
+
+Stop the duplicate development process or change the corresponding port and configuration.
+
+### Database tables are missing
+
+Run:
+
+```bash
+npm run db:migrate
+```
+
+### Login works on one URL but not another
+
+Open the app at `http://localhost:5173`. Do not mix `localhost` and `127.0.0.1`, because browsers treat them as separate cookie origins.
+
+## Production notes
+
+The Docker Compose configuration is intended for local development. A production deployment should use managed PostgreSQL, private S3-compatible object storage, HTTPS, a secret manager, database backups, monitoring, and separate staging and production environments.
+
+Before a public launch, add email verification, password reset, CSRF protection, S3 upload URLs, browser end-to-end tests, account export/deletion, backup restoration drills, and legal/privacy documents.
+
+See [docs/architecture.md](docs/architecture.md) for the broader production design.
