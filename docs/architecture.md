@@ -1,8 +1,8 @@
-# Daybook — production architecture plan
+# bucks — production architecture plan
 
 ## 1. What we are building
 
-Daybook is a personal-first money journal: a user can log income and expenses in seconds, understand a current balance, group spending by category, attach a receipt, and review meaningful monthly trends.
+bucks is a personal-first money journal: a user can log income and expenses in seconds, understand a current balance, group spending by category, attach a receipt, and review meaningful monthly trends.
 
 The product should **not** begin as a bank or a full accounting suite. Its first promise is reliable, low-friction tracking. Bank feeds, multi-person workspaces, exports, and recurring rules can come after the core daily habit works.
 
@@ -205,7 +205,7 @@ Recurring transactions, shared workspaces, receipt OCR, richer reporting, notifi
 
 ## 10. Decisions needed before implementation
 
-1. Is Daybook personal-only at launch, or do we support households/small-business teams from day one?
+1. Is bucks personal-only at launch, or do we support households/small-business teams from day one?
 2. Is India/INR the only launch market? If yes, design with currency fields anyway, but focus the UX and exports around INR.
 3. Do we need offline-first behavior in the first cloud version, or can sync require connectivity?
 4. Are receipts and exports launch features, or beta features?

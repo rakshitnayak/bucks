@@ -1,9 +1,11 @@
-# Daybook
+# bucks
 
-Daybook is a private money journal inspired by Cashbook. A user can create separate books for bank accounts, cash, cards, business spending, or a specific purpose, then record and analyse cash-in and cash-out entries.
+bucks is a private money journal. A user can create separate books for bank accounts, cash, cards, business spending, or a specific purpose, then record and analyse cash-in and cash-out entries.
 
 ## Features
 
+- Public landing page introducing bucks and its features
+- Free `/calculator` page with a 50/30/20 monthly budget split, editable percentages, and currency selection; no sign-in required
 - Email/password authentication with an `HttpOnly` session cookie
 - Multiple books with opening balances, currencies, icons, colours, archive, and restore
 - Cash-in and cash-out entries with categories, payment modes, dates, notes, and receipt images
@@ -14,6 +16,10 @@ Daybook is a private money journal inspired by Cashbook. A user can create separ
 - Per-book and all-book analytics
 - Persistent light and dark themes
 - Server-side authorization, integer money values, idempotency, and audit records
+
+## Public pages
+
+Open `http://localhost:5173/` for the landing and account form. Open `http://localhost:5173/calculator` for the budget calculator, including when signed out. The calculator works entirely in the browser and does not store income. Percentages must total 100%; the usual rule is 50/30/20 (50/30/30 totals 110%).
 
 ## Technology
 
@@ -168,10 +174,10 @@ npm run db:down
 │   ├── scripts/          Migration runner
 │   ├── src/              Fastify API, validation, and domain logic
 │   └── test/             API integration tests
-├── docs/                 Architecture and production notes
+├── docs/                 Architecture documentation
 ├── src/
 │   ├── api.ts            Typed browser API client and contracts
-│   ├── main.tsx          React application and UI components
+│   ├── main.tsx          React entry point (renders Root)
 │   ├── styles.css        Base component and responsive styles
 │   └── theme.css         Date-filter controls, themes, and mobile actions
 ├── compose.yaml          Local PostgreSQL container
@@ -348,10 +354,6 @@ npm run db:migrate
 
 Open the app at `http://localhost:5173`. Do not mix `localhost` and `127.0.0.1`, because browsers treat them as separate cookie origins.
 
-## Production notes
+## Documentation
 
-The Docker Compose configuration is intended for local development. A production deployment should use managed PostgreSQL, private S3-compatible object storage, HTTPS, a secret manager, database backups, monitoring, and separate staging and production environments.
-
-Before a public launch, add email verification, password reset, CSRF protection, S3 upload URLs, browser end-to-end tests, account export/deletion, backup restoration drills, and legal/privacy documents.
-
-See [docs/architecture.md](docs/architecture.md) for the broader production design.
+See [docs/architecture.md](docs/architecture.md) for architecture documentation.

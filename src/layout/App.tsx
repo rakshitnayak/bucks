@@ -10,6 +10,8 @@ type AppProps = {
 };
 
 export function App({ session, onLogout }: AppProps) {
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [selectedBook, setSelectedBook] = useState<string | null>(() =>
     location.hash.startsWith("#book/") ? location.hash.slice(6) : null,
   );
@@ -32,8 +34,18 @@ export function App({ session, onLogout }: AppProps) {
     setTheme((value) => (value === "light" ? "dark" : "light"));
 
   const signOut = async () => {
-    await api.logout();
-    onLogout();
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setLogoutError(null);
+    try {
+      await api.logout();
+      location.hash = "";
+      onLogout();
+    } catch {
+      setLogoutError("Unable to sign out. Please try again.");
+    } finally {
+      setIsSigningOut(false);
+    }
   };
 
   return (
@@ -41,14 +53,18 @@ export function App({ session, onLogout }: AppProps) {
       <Sidebar
         session={session}
         home={() => openBook(null)}
-        onLogout={onLogout}
+        onLogout={signOut}
+        isSigningOut={isSigningOut}
         theme={theme}
         toggleTheme={toggleTheme}
       />
       <div className="mobile-actions">
         <button onClick={toggleTheme}>{theme === "light" ? "☾" : "☀"}</button>
-        <button onClick={signOut}>Sign out</button>
+        <button onClick={signOut} disabled={isSigningOut}>
+          {isSigningOut ? "Signing out…" : "Sign out"}
+        </button>
       </div>
+      {logoutError && <div role="alert">{logoutError}</div>}
       {selectedBook ? (
         <BookPage
           session={session}

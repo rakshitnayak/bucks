@@ -559,7 +559,7 @@ app.get("/v1/books/:bookId/export.pdf", auth, async (request, reply) => {
     size: "A4",
     margin: 46,
     bufferPages: true,
-    info: { Title: `${book.name} - Daybook report`, Author: "Daybook" },
+    info: { Title: `${book.name} - bucks report`, Author: "bucks" },
   });
   const chunks: Buffer[] = [];
   document.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -572,7 +572,7 @@ app.get("/v1/books/:bookId/export.pdf", auth, async (request, reply) => {
     .fillColor("#ffffff")
     .font("Helvetica-Bold")
     .fontSize(22)
-    .text("DAYBOOK", 46, 40);
+    .text("BUCKS", 46, 40);
   document
     .font("Helvetica")
     .fontSize(10)
@@ -675,7 +675,7 @@ app.get("/v1/books/:bookId/export.pdf", auth, async (request, reply) => {
       .fillColor("#8a8c83")
       .font("Helvetica")
       .fontSize(8)
-      .text(`Daybook  |  ${book.name}`, 46, 780, { width: 400 })
+      .text(`bucks  |  ${book.name}`, 46, 780, { width: 400 })
       .text(`Page ${index + 1}`, 480, 780, { width: 69, align: "right" });
   }
   document.end();

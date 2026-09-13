@@ -61,21 +61,28 @@
   line-height: 1.5;
 }
 
+/* Midnight surfaces with lavender accents and distinct money states. */
 [data-theme="dark"] {
   color-scheme: dark;
-  --ink: #eef0e9;
-  --paper: #242722;
-  --line: #3b3e37;
-  --muted: #a6a99f;
-  background: #181a17;
+  --ink: #edf2ff;
+  --paper: #182238;
+  --line: #34435d;
+  --muted: #b0bdd3;
+  --green: #71dfba;
+  --red: #ff9b9b;
+  --accent: #c4b5fd;
+  --accent-ink: #211b38;
+  --surface-raised: #22304a;
+  color: var(--ink);
+  background: #0d1424;
 }
 [data-theme="dark"] body,
 [data-theme="dark"] main {
-  color: #eef0e9;
-  background: #181a17;
+  color: var(--ink);
+  background: #0d1424;
 }
 [data-theme="dark"] aside {
-  background: #20231f;
+  background: #121c2e;
   border-color: var(--line);
 }
 [data-theme="dark"] .brand,
@@ -83,51 +90,116 @@
 [data-theme="dark"] h2,
 [data-theme="dark"] h3,
 [data-theme="dark"] .book-open {
-  color: #f4f5ef;
+  color: var(--ink);
 }
 [data-theme="dark"] .brand i,
 [data-theme="dark"] .primary,
 [data-theme="dark"] .period-tabs button.active {
-  color: #20231f;
-  background: #eef0e9;
+  color: var(--accent-ink);
+  background: var(--accent);
 }
-[data-theme="dark"] nav .active,
+[data-theme="dark"] nav .active {
+  color: #e3d9ff;
+  background: #302747;
+}
 [data-theme="dark"] .book-card,
 [data-theme="dark"] .panel,
 [data-theme="dark"] .metric,
 [data-theme="dark"] .modal,
+[data-theme="dark"] .auth-card,
 [data-theme="dark"] .period-tabs,
 [data-theme="dark"] .export-button {
-  color: #e5e7df;
+  color: var(--ink);
   background: var(--paper);
   border-color: var(--line);
 }
 [data-theme="dark"] input,
 [data-theme="dark"] select,
-[data-theme="dark"] textarea,
-[data-theme="dark"] .tabs .chosen {
-  color: #eef0e9;
-  background: #20231f;
-  border-color: #41443d;
+[data-theme="dark"] textarea {
+  color: var(--ink);
+  background: #111c30;
+  border-color: var(--line);
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 [data-theme="dark"] .tabs,
 [data-theme="dark"] .secondary {
-  color: #d5d8ce;
-  background: #31342e;
+  color: var(--ink);
+  background: var(--surface-raised);
+}
+[data-theme="dark"] .tabs .chosen {
+  background: #354263;
 }
 [data-theme="dark"] .summary-card {
-  background: #0f110f;
-  border: 1px solid #363a32;
+  background: linear-gradient(120deg, #25233f, #182d44);
+  border: 1px solid #484263;
+}
+[data-theme="dark"] .summary-card .income {
+  color: var(--green) !important;
+}
+[data-theme="dark"] .summary-card .eyebrow,
+[data-theme="dark"] .subtle,
+[data-theme="dark"] .summary-numbers small {
+  color: #c0cbe0;
 }
 [data-theme="dark"] .book-stats,
 [data-theme="dark"] .entry-row,
 [data-theme="dark"] .category,
-[data-theme="dark"] .mode-list {
-  border-color: #383b35;
+[data-theme="dark"] .mode-list,
+[data-theme="dark"] .empty {
+  border-color: var(--line);
 }
 [data-theme="dark"] .plan {
-  color: #cbd8c4;
-  background: #2d382b;
+  color: #d5caff;
+  background: #302747;
+}
+[data-theme="dark"] .user > i {
+  color: #14293b;
+  background: #91c9ef;
+}
+[data-theme="dark"] nav a,
+[data-theme="dark"] nav button,
+[data-theme="dark"] .logout,
+[data-theme="dark"] .eyebrow,
+[data-theme="dark"] .check,
+[data-theme="dark"] .back,
+[data-theme="dark"] .auth-switch,
+[data-theme="dark"] .book-card footer button,
+[data-theme="dark"] .row-actions button,
+[data-theme="dark"] .search span {
+  color: var(--muted);
+}
+[data-theme="dark"] nav .active {
+  color: #e3d9ff;
+}
+[data-theme="dark"] .receipt {
+  color: #b5a3fb;
+}
+[data-theme="dark"] .notice,
+[data-theme="dark"] .form-error {
+  color: #ffc2b7;
+  background: #3b2330;
+  border-color: #805062;
+}
+[data-theme="dark"] .auth-page {
+  background: radial-gradient(ellipse at top, #292744, #0d1424 70%);
+}
+[data-theme="dark"] .backdrop {
+  background: #050a16bb;
+}
+[data-theme="dark"] :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+[data-theme="dark"] :is(.secondary, .export-button):hover,
+[data-theme="dark"] nav :is(a, button):hover {
+  background: #34405c;
+}
+[data-theme="dark"] .row-actions button:focus-visible {
+  opacity: 1;
 }
 
 @media (max-width: 900px) {

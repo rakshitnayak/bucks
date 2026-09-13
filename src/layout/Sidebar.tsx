@@ -1,9 +1,10 @@
-import { api, type Session } from "../api";
+import type { Session } from "../api";
 
 type SidebarProps = {
   session: Session;
   home: () => void;
   onLogout: () => void;
+  isSigningOut: boolean;
   theme: "light" | "dark";
   toggleTheme: () => void;
 };
@@ -12,18 +13,14 @@ export function Sidebar({
   session,
   home,
   onLogout,
+  isSigningOut,
   theme,
   toggleTheme,
 }: SidebarProps) {
-  const signOut = async () => {
-    await api.logout();
-    onLogout();
-  };
-
   return (
     <aside>
       <button className="brand plain" onClick={home}>
-        <i>d</i>daybook
+        <i>b</i>bucks
       </button>
       <nav>
         <button className="active" onClick={home}>
@@ -51,8 +48,8 @@ export function Sidebar({
             <b>{session.user.email.split("@")[0]}</b>
             <small>{session.user.email}</small>
           </span>
-          <button className="logout" onClick={signOut}>
-            Sign out
+          <button className="logout" onClick={onLogout} disabled={isSigningOut}>
+            {isSigningOut ? "Signing out…" : "Sign out"}
           </button>
         </div>
       </div>
