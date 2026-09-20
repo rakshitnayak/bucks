@@ -175,9 +175,6 @@
 [data-theme="dark"] nav .active {
   color: #e3d9ff;
 }
-[data-theme="dark"] .receipt {
-  color: #b5a3fb;
-}
 [data-theme="dark"] .notice,
 [data-theme="dark"] .form-error {
   color: #ffc2b7;

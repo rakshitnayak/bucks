@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: bucks
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build:prod
+    startCommand: npm run start:prod
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_EMAIL
+        sync: false

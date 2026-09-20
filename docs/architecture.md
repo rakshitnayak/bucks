@@ -2,14 +2,14 @@
 
 ## 1. What we are building
 
-bucks is a personal-first money journal: a user can log income and expenses in seconds, understand a current balance, group spending by category, attach a receipt, and review meaningful monthly trends.
+bucks is a personal-first money journal: a user can log income and expenses in seconds, understand a current balance, group spending by category, and review meaningful monthly trends.
 
 The product should **not** begin as a bank or a full accounting suite. Its first promise is reliable, low-friction tracking. Bank feeds, multi-person workspaces, exports, and recurring rules can come after the core daily habit works.
 
 ### Product boundaries for v1
 
 - One user owns one or more wallets (cash, bank, card).
-- A transaction is income, expense, or transfer; it has a date, amount, currency, category, wallet, and optional note/receipt.
+- A transaction is income, expense, or transfer; it has a date, amount, currency, category, wallet, and optional note.
 - Users can create, edit, delete, filter, and export their own transactions.
 - Dashboards are derived from the transaction ledger; never maintained as a separate editable source of truth.
 
@@ -25,9 +25,7 @@ flowchart LR
   A --> L[Ledger module]
   A --> R[Reporting module]
   A --> P[(PostgreSQL)]
-  A -->|short-lived upload URL| S[Private object storage]
   Q[Worker / queue] --> P
-  Q --> S
   Q --> E[Email / export provider]
   O[Observability] <-. logs, metrics, traces .-> A
   O <-.-> Q
@@ -42,8 +40,7 @@ flowchart LR
 | Database        | Managed PostgreSQL                               | Transactions, constraints, indexes, backups, and reporting queries are all a natural fit. |
 | Data access     | Drizzle ORM or Prisma                            | Migrations plus typed query boundaries. Pick one; do not mix.                             |
 | Authentication  | A managed auth provider or Better Auth           | Password/session security should not be hand-built.                                       |
-| Receipts        | Private S3-compatible object storage             | Cheap blobs; upload directly with constrained, short-lived signed URLs.                   |
-| Background work | Managed queue / worker                           | Exports, reminders, receipt OCR, and monthly summaries must not hold up an API request.   |
+| Background work | Managed queue / worker                           | Exports, reminders, and monthly summaries must not hold up an API request.                |
 | Hosting         | CDN for web + managed container/serverless API   | Independent deploys and simple rollback.                                                  |
 | Monitoring      | Error tracking + structured logs + uptime checks | Know when logging, export, or sync fails before users do.                                 |
 
@@ -60,10 +57,9 @@ apps/
     ledger/            transaction and transfer rules
     categories/        defaults and user customisation
     reports/           read-only aggregation queries
-    receipts/          signed URL creation and attachment finalisation
     exports/           export request and download records
     shared/            validation, errors, time, money, audit logging
-  worker/              scheduled summaries, exports, image processing
+  worker/              scheduled summaries and exports
 packages/
   contracts/           request/response schemas shared by client and API
 ```
@@ -82,7 +78,6 @@ erDiagram
   WORKSPACES ||--o{ CATEGORIES : customises
   WALLETS ||--o{ TRANSACTIONS : records
   CATEGORIES ||--o{ TRANSACTIONS : classifies
-  TRANSACTIONS ||--o{ RECEIPTS : has
   TRANSACTIONS ||--o{ AUDIT_EVENTS : changes
 ```
 
@@ -97,7 +92,6 @@ erDiagram
 | `categories`        | `id`, `workspace_id`, `name`, `kind`, `color`                                                                                                         | Seed global defaults, allow workspace-specific ones.       |
 | `transactions`      | `id`, `workspace_id`, `wallet_id`, `category_id`, `kind`, `amount_minor`, `currency`, `occurred_at`, `note`, `created_at`, `updated_at`, `deleted_at` | Immutable economic record; soft-delete for recovery/audit. |
 | `transaction_links` | `transaction_id`, `counterparty_transaction_id`                                                                                                       | Connects the two legs of a transfer.                       |
-| `receipts`          | `id`, `transaction_id`, `object_key`, `content_type`, `byte_size`, `status`                                                                           | Never store image bytes in Postgres.                       |
 | `audit_events`      | `id`, `workspace_id`, `actor_id`, `entity_type`, `entity_id`, `action`, `before`, `after`, `created_at`                                               | Support, recovery, and security trail.                     |
 
 Critical indexes: `(workspace_id, occurred_at desc)`, `(workspace_id, wallet_id, occurred_at desc)`, `(workspace_id, category_id, occurred_at desc)`, and partial indexes excluding soft-deleted transactions.
@@ -111,15 +105,6 @@ Critical indexes: `(workspace_id, occurred_at desc)`, `(workspace_id, wallet_id,
 3. API authenticates the session, confirms membership, verifies the wallet/category belong to the workspace, validates amount/currency/date, and writes the transaction plus audit event in one database transaction.
 4. API returns the canonical record. The client replaces its optimistic row.
 5. If offline, the client puts the command into a local outbox and retries with the same idempotency key after reconnecting.
-
-### Attach a receipt
-
-1. Client requests an upload URL for a specific transaction.
-2. API authorizes that transaction and returns a short-lived, content-type- and size-limited signed URL.
-3. Browser uploads directly to private object storage.
-4. Client calls receipt finalisation; worker scans/processes it and updates the receipt status.
-
-Signed URLs should be short-lived and scoped to one object. AWS documents that a presigned upload can grant upload access without distributing AWS credentials. [AWS S3 presigned uploads](https://docs.aws.amazon.com/AmazonS3/latest/userguide/PresignedUrlUploadObject.html)
 
 ### Monthly dashboard
 
@@ -143,8 +128,6 @@ PATCH  /v1/transactions/:id
 DELETE /v1/transactions/:id                   soft delete
 GET    /v1/workspaces/:id/wallets
 POST   /v1/workspaces/:id/wallets
-POST   /v1/transactions/:id/receipt-upload
-POST   /v1/transactions/:id/receipts/complete
 POST   /v1/workspaces/:id/exports
 ```
 
@@ -155,11 +138,11 @@ Use cursor pagination, ISO-8601 timestamps in UTC, explicit request/response sch
 Financial data needs a stronger-than-usual baseline even before bank connections exist.
 
 - Every query that accepts a resource ID must also enforce workspace membership server-side. Broken object-level authorization is a common API risk, so client-side hiding is never a security control. [OWASP API Security guidance](https://owasp.org/www-project-api-security/)
-- Use HTTPS, secure `HttpOnly`/`SameSite` session cookies, CSRF protection for cookie-authenticated state-changing calls, and rate limits on login, export, and upload endpoints.
-- Encrypt data in transit and at rest; keep object-storage buckets private; validate file MIME type, size, and image content before processing.
-- Log request IDs and security-relevant audit events, but redact notes, receipt URLs, session tokens, and raw money data from general logs.
+- Use HTTPS, secure `HttpOnly`/`SameSite` session cookies, CSRF protection for cookie-authenticated state-changing calls, and rate limits on login and export endpoints.
+- Encrypt data in transit and at rest.
+- Log request IDs and security-relevant audit events, but redact notes, session tokens, and raw money data from general logs.
 - Provide account export and deletion workflows; set backups, retention, and restoration drills before launch.
-- Use least-privilege database and storage roles. Secrets belong in the deployment platform’s secret manager, never source control.
+- Use a least-privilege database role. Secrets belong in the deployment platform’s secret manager, never source control.
 
 ## 8. Production readiness gates
 
@@ -183,13 +166,13 @@ Keep the current Vite app. Add routing, a typed client state boundary, unit test
 
 ### Phase 1 — trustworthy cloud ledger (weeks 2–3)
 
-Provision staging PostgreSQL and object storage. Build authentication, workspaces, wallets, categories, transactions, authorization middleware, migrations, and the dashboard/report endpoint. Move the UI from `localStorage` to the API, retaining a small offline outbox.
+Provision staging PostgreSQL. Build authentication, workspaces, wallets, categories, transactions, authorization middleware, migrations, and the dashboard/report endpoint. Move the UI from `localStorage` to the API, retaining a small offline outbox.
 
 **Release criterion:** a signed-in user can use two devices without losing or duplicating a transaction.
 
 ### Phase 2 — useful finance experience (weeks 4–5)
 
-Add transaction editing, soft-delete/recovery, transfers, wallet balances, budgets, search/filter, CSV export, and receipt attachments. Add export jobs and email/download delivery.
+Add transaction editing, soft-delete/recovery, transfers, wallet balances, budgets, search/filter, and CSV export. Add export jobs and email/download delivery.
 
 **Release criterion:** a user can completely replace a basic spreadsheet for monthly tracking.
 
@@ -201,13 +184,13 @@ Add observability, load testing, backup restore exercise, security review, acces
 
 ### Phase 4 — only after retention proves value
 
-Recurring transactions, shared workspaces, receipt OCR, richer reporting, notifications, and bank imports. Treat direct bank connectivity as a separate compliance/security project; do not bolt it into the first public release.
+Recurring transactions, shared workspaces, richer reporting, notifications, and bank imports. Treat direct bank connectivity as a separate compliance/security project; do not bolt it into the first public release.
 
 ## 10. Decisions needed before implementation
 
 1. Is bucks personal-only at launch, or do we support households/small-business teams from day one?
 2. Is India/INR the only launch market? If yes, design with currency fields anyway, but focus the UX and exports around INR.
 3. Do we need offline-first behavior in the first cloud version, or can sync require connectivity?
-4. Are receipts and exports launch features, or beta features?
+4. Are exports a launch feature or a beta feature?
 
 My recommendation: launch as **personal, INR-first, online-capable with an offline entry outbox, no bank connection**, then expand from verified user behavior.

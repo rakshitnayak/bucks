@@ -571,10 +571,6 @@ h3 {
     500 11px ui-monospace,
     monospace;
 }
-.receipt {
-  font-size: 9px;
-  color: #576b52;
-}
 .row-actions {
   display: flex;
 }
@@ -810,7 +806,6 @@ textarea {
   .entry-row {
     grid-template-columns: 35px 1fr auto;
   }
-  .entry-row > .receipt,
   .entry-row > .row-actions {
     grid-column: 2;
   }

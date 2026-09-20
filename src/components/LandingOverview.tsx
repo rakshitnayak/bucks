@@ -7,7 +7,7 @@ const features = [
   {
     icon: "+",
     title: "Capture the little things.",
-    copy: "Log cash in and out with categories, notes, payment modes and receipt images.",
+    copy: "Log cash in and out with categories, notes and the payment mode you used.",
   },
   {
     icon: "◷",

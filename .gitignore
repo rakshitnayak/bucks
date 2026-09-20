@@ -6,3 +6,4 @@ apps/api/.env
 data/
 output/
 tmp/
+backups/

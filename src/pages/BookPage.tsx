@@ -288,20 +288,14 @@ export function BookPage({ session, bookId, back }: BookPageProps) {
           categories={data.categories}
           currency={book.currency}
           onClose={() => setEntryModal(undefined)}
-          onSave={async (input, file) => {
-            let entryId: string;
+          onSave={async (input) => {
             if (entryModal) {
-              entryId = entryModal.id;
-              await api.updateEntry(entryId, input);
+              await api.updateEntry(entryModal.id, input);
             } else {
-              const result = await api.createEntry(bookId, {
+              await api.createEntry(bookId, {
                 ...input,
                 idempotencyKey: crypto.randomUUID(),
               });
-              entryId = result.entry.id;
-            }
-            if (file) {
-              await api.uploadAttachment(entryId, file);
             }
             setEntryModal(undefined);
             load();

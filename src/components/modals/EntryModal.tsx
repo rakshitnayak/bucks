@@ -18,7 +18,7 @@ type EntryModalProps = {
   categories: Category[];
   currency: string;
   onClose: () => void;
-  onSave: (input: EntryFormInput, file?: File) => Promise<void>;
+  onSave: (input: EntryFormInput) => Promise<void>;
 };
 
 export function EntryModal({
@@ -35,22 +35,18 @@ export function EntryModal({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const file = form.get("attachment");
     setBusy(true);
 
     try {
-      await onSave(
-        {
-          title: String(form.get("title")),
-          kind,
-          amountMinor: Math.round(Number(form.get("amount")) * 100),
-          categoryId: String(form.get("categoryId")),
-          occurredAt: new Date(String(form.get("occurredAt"))).toISOString(),
-          paymentMode: String(form.get("paymentMode")) as PaymentMode,
-          note: String(form.get("note") || ""),
-        },
-        file instanceof File && file.size ? file : undefined,
-      );
+      await onSave({
+        title: String(form.get("title")),
+        kind,
+        amountMinor: Math.round(Number(form.get("amount")) * 100),
+        categoryId: String(form.get("categoryId")),
+        occurredAt: new Date(String(form.get("occurredAt"))).toISOString(),
+        paymentMode: String(form.get("paymentMode")) as PaymentMode,
+        note: String(form.get("note") || ""),
+      });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -154,16 +150,6 @@ export function EntryModal({
               placeholder="Optional details"
             />
           </label>
-          {!entry?.attachmentId && (
-            <label className="wide">
-              Receipt image <small>JPEG, PNG or WebP · up to 5 MB</small>
-              <input
-                name="attachment"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-              />
-            </label>
-          )}
         </div>
         {error && <p className="form-error">{error}</p>}
         <button className="primary full" disabled={busy || !categories.length}>

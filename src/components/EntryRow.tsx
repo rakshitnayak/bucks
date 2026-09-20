@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { api, type Entry } from "../api";
+import type { Entry } from "../api";
 import { money, paymentModeLabel, shortDate } from "../utils/format";
 
 type EntryRowProps = {
@@ -24,15 +24,6 @@ export function EntryRow({ entry, actions }: EntryRowProps) {
           {entry.note ? ` · ${entry.note}` : ""}
         </small>
       </span>
-      {entry.attachmentId && (
-        <a
-          className="receipt"
-          href={api.attachmentUrl(entry.attachmentId)}
-          target="_blank"
-        >
-          Receipt
-        </a>
-      )}
       <strong className={entry.kind}>
         {entry.kind === "income" ? "+" : "−"}{" "}
         {money(entry.amountMinor, entry.currency)}

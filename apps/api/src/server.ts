@@ -3,13 +3,12 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import jwt from "@fastify/jwt";
-import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import bcrypt from "bcryptjs";
-import { createReadStream } from "node:fs";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg, { type PoolClient } from "pg";
 import PDFDocument from "pdfkit";
 import { z, ZodError } from "zod";
@@ -19,27 +18,43 @@ const env = z
   .object({
     DATABASE_URL: z.string().url(),
     JWT_SECRET: z.string().min(32),
-    WEB_ORIGIN: z.string().url(),
+    WEB_ORIGIN: z
+      .string()
+      .url()
+      .default(process.env.RENDER_EXTERNAL_URL ?? "http://localhost:5173"),
     PORT: z.coerce.number().int().positive().default(3001),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-    STORAGE_DIR: z.string().default("./data/uploads"),
-    MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(5_000_000),
+    DATABASE_SSL: z.enum(["true", "false"]).optional(),
+    ALLOWED_EMAIL: z.string().trim().toLowerCase().email().optional(),
   })
   .parse(process.env);
-const storageDirectory = resolve(env.STORAGE_DIR);
-await mkdir(storageDirectory, { recursive: true });
+const useDatabaseSsl =
+  env.DATABASE_SSL === "true" ||
+  (env.DATABASE_SSL === undefined && env.NODE_ENV === "production");
 const db = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
-  ssl: env.NODE_ENV === "production" ? { rejectUnauthorized: true } : undefined,
+  ssl: useDatabaseSsl || undefined,
 });
 const app = Fastify({
   logger: { redact: ["req.headers.authorization", "req.headers.cookie"] },
   trustProxy: env.NODE_ENV === "production",
 });
-await app.register(helmet);
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      "style-src": [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+      ],
+      "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
+      "img-src": ["'self'", "data:"],
+    },
+  },
+});
 await app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
 await app.register(cookie);
 await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
@@ -47,9 +62,12 @@ await app.register(jwt, {
   secret: env.JWT_SECRET,
   cookie: { cookieName: "daybook_session", signed: false },
 });
-await app.register(multipart, {
-  limits: { files: 1, fileSize: env.MAX_UPLOAD_BYTES },
-});
+if (env.NODE_ENV === "production") {
+  await app.register(fastifyStatic, {
+    root: resolve(dirname(fileURLToPath(import.meta.url)), "../../../dist"),
+    wildcard: false,
+  });
+}
 
 // Authentication and request validation.
 type User = { id: string; email: string };
@@ -75,7 +93,6 @@ const workspaceParams = z.object({ workspaceId: z.string().uuid() });
 const bookParams = z.object({ bookId: z.string().uuid() });
 const entryParams = z.object({ entryId: z.string().uuid() });
 const categoryParams = z.object({ categoryId: z.string().uuid() });
-const attachmentParams = z.object({ attachmentId: z.string().uuid() });
 const paymentMode = z.enum([
   "cash",
   "upi",
@@ -235,7 +252,6 @@ const mapEntry = (row: Record<string, unknown>) => ({
   categoryColor: row.category_color,
   paymentMode: row.payment_mode,
   note: row.note,
-  attachmentId: row.attachment_id ?? null,
   isSystem: row.is_system,
   deletedAt: row.deleted_at ?? null,
 });
@@ -246,6 +262,11 @@ app.post(
   { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
   async (request, reply) => {
     const input = credentials.parse(request.body);
+    if (env.NODE_ENV === "production" && input.email !== env.ALLOWED_EMAIL)
+      return reply.code(403).send({
+        code: "REGISTRATION_DISABLED",
+        message: "Registration is not available for this email.",
+      });
     const client = await db.connect();
     try {
       await client.query("BEGIN");
@@ -382,7 +403,7 @@ app.get(
         params,
       ),
       db.query(
-        `SELECT t.*,c.name category,c.color category_color,a.id attachment_id,w.name book_name FROM transactions t JOIN wallets w ON w.id=t.wallet_id AND w.archived_at IS NULL LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN entry_attachments a ON a.transaction_id=t.id WHERE t.workspace_id=$1 AND t.deleted_at IS NULL ORDER BY t.occurred_at DESC LIMIT 8`,
+        `SELECT t.*,c.name category,c.color category_color,w.name book_name FROM transactions t JOIN wallets w ON w.id=t.wallet_id AND w.archived_at IS NULL LEFT JOIN categories c ON c.id=t.category_id WHERE t.workspace_id=$1 AND t.deleted_at IS NULL ORDER BY t.occurred_at DESC LIMIT 8`,
         [workspaceId],
       ),
     ]);
@@ -705,7 +726,7 @@ app.get("/v1/books/:bookId", auth, async (request, reply) => {
   const entryValues = [...filter.values, query.limit + 1];
   const [entries, categories, summary, breakdown] = await Promise.all([
     db.query(
-      `SELECT t.*,c.name category,c.color category_color,a.id attachment_id FROM transactions t LEFT JOIN categories c ON c.id=t.category_id LEFT JOIN entry_attachments a ON a.transaction_id=t.id WHERE ${filter.clauses.join(" AND ")} ORDER BY t.occurred_at DESC,t.id DESC LIMIT $${entryValues.length}`,
+      `SELECT t.*,c.name category,c.color category_color FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE ${filter.clauses.join(" AND ")} ORDER BY t.occurred_at DESC,t.id DESC LIMIT $${entryValues.length}`,
       entryValues,
     ),
     db.query(
@@ -970,126 +991,27 @@ app.patch("/v1/categories/:categoryId", auth, async (request, reply) => {
   return { updated: true };
 });
 
-const signatures: Record<string, (buffer: Buffer) => boolean> = {
-  "image/jpeg": (buffer) =>
-    buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
-  "image/png": (buffer) =>
-    buffer
-      .subarray(0, 8)
-      .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
-  "image/webp": (buffer) =>
-    buffer.subarray(0, 4).toString() === "RIFF" &&
-    buffer.subarray(8, 12).toString() === "WEBP",
-};
-app.post("/v1/entries/:entryId/attachment", auth, async (request, reply) => {
-  const { entryId } = entryParams.parse(request.params);
-  const user = userOf(request);
-  const owned = await db.query(
-    `SELECT t.workspace_id FROM transactions t JOIN workspace_members m ON m.workspace_id=t.workspace_id WHERE t.id=$1 AND m.user_id=$2 AND t.deleted_at IS NULL`,
-    [entryId, user.id],
-  );
-  if (!owned.rowCount)
-    return reply
-      .code(404)
-      .send({ code: "NOT_FOUND", message: "Entry not found." });
-  const part = await request.file();
-  if (!part)
-    return reply
-      .code(400)
-      .send({ code: "FILE_REQUIRED", message: "Choose an image." });
-  const validate = signatures[part.mimetype];
-  const buffer = await part.toBuffer();
-  if (!validate || !validate(buffer))
-    return reply.code(400).send({
-      code: "INVALID_IMAGE",
-      message: "Upload a valid JPEG, PNG, or WebP image.",
-    });
-  const extension =
-    part.mimetype === "image/jpeg"
-      ? ".jpg"
-      : part.mimetype === "image/png"
-        ? ".png"
-        : ".webp";
-  const objectKey = `${randomUUID()}${extension}`;
-  await writeFile(resolve(storageDirectory, objectKey), buffer, { flag: "wx" });
-  try {
-    const result = await db.query(
-      `INSERT INTO entry_attachments(transaction_id,object_key,original_name,content_type,byte_size) VALUES($1,$2,$3,$4,$5) ON CONFLICT(transaction_id) DO NOTHING RETURNING id`,
-      [
-        entryId,
-        objectKey,
-        part.filename.slice(0, 255),
-        part.mimetype,
-        buffer.length,
-      ],
-    );
-    if (!result.rowCount) {
-      await unlink(resolve(storageDirectory, objectKey));
-      return reply.code(409).send({
-        code: "ATTACHMENT_EXISTS",
-        message: "This entry already has an attachment.",
-      });
-    }
-    return reply.code(201).send({ attachmentId: result.rows[0].id });
-  } catch (error) {
-    await unlink(resolve(storageDirectory, objectKey)).catch(() => undefined);
-    throw error;
-  }
-});
-app.get("/v1/attachments/:attachmentId", auth, async (request, reply) => {
-  const { attachmentId } = attachmentParams.parse(request.params);
-  const result = await db.query(
-    `SELECT a.* FROM entry_attachments a JOIN transactions t ON t.id=a.transaction_id JOIN workspace_members m ON m.workspace_id=t.workspace_id WHERE a.id=$1 AND m.user_id=$2`,
-    [attachmentId, userOf(request).id],
-  );
-  if (!result.rowCount)
-    return reply
-      .code(404)
-      .send({ code: "NOT_FOUND", message: "Attachment not found." });
-  const row = result.rows[0];
-  reply.header(
-    "Content-Disposition",
-    `inline; filename="${String(row.original_name).replace(/["\\]/g, "")}"`,
-  );
-  return reply
-    .type(row.content_type)
-    .send(createReadStream(resolve(storageDirectory, row.object_key)));
-});
-app.delete("/v1/attachments/:attachmentId", auth, async (request, reply) => {
-  const { attachmentId } = attachmentParams.parse(request.params);
-  const result = await db.query(
-    `DELETE FROM entry_attachments a USING transactions t,workspace_members m WHERE a.id=$1 AND t.id=a.transaction_id AND m.workspace_id=t.workspace_id AND m.user_id=$2 RETURNING a.object_key`,
-    [attachmentId, userOf(request).id],
-  );
-  if (!result.rowCount)
-    return reply
-      .code(404)
-      .send({ code: "NOT_FOUND", message: "Attachment not found." });
-  await unlink(resolve(storageDirectory, result.rows[0].object_key)).catch(
-    () => undefined,
-  );
-  return reply.code(204).send();
-});
-
 app.get("/health", async () => {
   await db.query("SELECT 1");
   return { status: "ok" };
+});
+app.setNotFoundHandler((request, reply) => {
+  if (
+    env.NODE_ENV === "production" &&
+    request.method === "GET" &&
+    !request.url.startsWith("/v1/") &&
+    request.headers.accept?.includes("text/html")
+  )
+    return reply.sendFile("index.html");
+  return reply
+    .code(404)
+    .send({ code: "NOT_FOUND", message: "Route not found." });
 });
 app.setErrorHandler((error, request, reply) => {
   if (error instanceof ZodError)
     return reply.code(400).send({
       code: "INVALID_INPUT",
       message: error.issues[0]?.message ?? "Invalid input.",
-    });
-  if (
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    error.code === "FST_REQ_FILE_TOO_LARGE"
-  )
-    return reply.code(413).send({
-      code: "FILE_TOO_LARGE",
-      message: `Image must be smaller than ${Math.round(env.MAX_UPLOAD_BYTES / 1_000_000)} MB.`,
     });
   request.log.error(error);
   return reply

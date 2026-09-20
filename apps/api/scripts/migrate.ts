@@ -4,7 +4,15 @@ import pg from "pg";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
-const db = new pg.Pool({ connectionString: url });
+const db = new pg.Pool({
+  connectionString: url,
+  ssl:
+    process.env.DATABASE_SSL === "false"
+      ? undefined
+      : process.env.NODE_ENV === "production"
+        ? true
+        : undefined,
+});
 const directory = new URL("../migrations/", import.meta.url);
 await db.query(
   "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",

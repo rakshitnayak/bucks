@@ -47,7 +47,6 @@ export type Entry = {
   categoryColor?: string;
   paymentMode: PaymentMode;
   note?: string | null;
-  attachmentId?: string | null;
   isSystem?: boolean;
   bookName?: string;
 };
@@ -192,15 +191,6 @@ export const api = {
       `/v1/workspaces/${workspaceId}/categories`,
       { method: "POST", body: JSON.stringify(input) },
     ),
-  uploadAttachment: (entryId: string, file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return request<{ attachmentId: string }>(
-      `/v1/entries/${entryId}/attachment`,
-      { method: "POST", body },
-    );
-  },
-  attachmentUrl: (id: string) => `/v1/attachments/${id}`,
   exportUrl: (bookId: string, filters: Record<string, string | undefined>) =>
     `/v1/books/${bookId}/export.pdf${query(filters)}`,
 };
