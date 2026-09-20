@@ -3,7 +3,7 @@ services:
     name: bucks
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build:prod
+    buildCommand: npm ci --include=dev && npm run build:prod
     startCommand: npm run start:prod
     healthCheckPath: /health
     envVars:

@@ -25,6 +25,8 @@ Open `http://localhost:5173/` for the landing and account form. Open `http://loc
 
 The repository includes [`render.yaml`](./render.yaml) for a single free Render web service. The service builds the React frontend, serves it from Fastify, runs pending database migrations on startup, and connects to an external PostgreSQL database.
 
+Render installs build-time TypeScript packages with `npm ci --include=dev`; the production service then starts with `npm run start:prod`.
+
 Required Render environment variables:
 
 - `DATABASE_URL`: the pooled PostgreSQL connection string from Supabase
