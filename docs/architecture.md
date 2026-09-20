@@ -1,196 +1,172 @@
-# bucks — production architecture plan
+# bucks — system architecture
 
-## 1. What we are building
+## Overview
 
-bucks is a personal-first money journal: a user can log income and expenses in seconds, understand a current balance, group spending by category, and review meaningful monthly trends.
+bucks is a personal money journal for tracking income and expenses across separate books such as bank accounts, cash, cards, business spending, or savings goals.
 
-The product should **not** begin as a bank or a full accounting suite. Its first promise is reliable, low-friction tracking. Bank feeds, multi-person workspaces, exports, and recurring rules can come after the core daily habit works.
+The application follows a three-tier architecture:
 
-### Product boundaries for v1
+1. A React browser client presents the interface and calls the API.
+2. A Fastify service handles authentication, validation, authorization, ledger operations, analytics, and PDF generation.
+3. PostgreSQL stores users, books, categories, entries, memberships, and audit history.
 
-- One user owns one or more wallets (cash, bank, card).
-- A transaction is income, expense, or transfer; it has a date, amount, currency, category, wallet, and optional note.
-- Users can create, edit, delete, filter, and export their own transactions.
-- Dashboards are derived from the transaction ledger; never maintained as a separate editable source of truth.
-
-## 2. Recommended production shape
-
-Keep the first production deployment a **modular monolith**: one TypeScript application, one PostgreSQL database, and one worker process. It is dramatically easier to operate than microservices, while keeping clean boundaries for later extraction.
+## System diagram
 
 ```mermaid
 flowchart LR
-  B[Browser / mobile web] -->|HTTPS| W[React web app]
-  W -->|HTTPS + secure session| A[TypeScript API]
-  A --> AU[Authentication + authorization]
-  A --> L[Ledger module]
-  A --> R[Reporting module]
-  A --> P[(PostgreSQL)]
-  Q[Worker / queue] --> P
-  Q --> E[Email / export provider]
-  O[Observability] <-. logs, metrics, traces .-> A
-  O <-.-> Q
+  U[User] --> B[Browser]
+  B --> R[React + Vite]
+  R -->|JSON API| F[Fastify API]
+  F -->|SQL| P[(PostgreSQL)]
+  F -->|Generated document| D[PDF report]
+
+  subgraph Render
+    R
+    F
+  end
 ```
 
-### Concrete stack
+The React application and Fastify API share one TypeScript repository. In the hosted application, Fastify also serves the compiled React files. The API connects to PostgreSQL through a pooled connection.
 
-| Concern         | Start with                                       | Why                                                                                       |
-| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| Web client      | Current React + Vite app                         | Fast development and a small, responsive client.                                          |
-| API             | Node.js + TypeScript + Fastify                   | One codebase/language; strongly typed request validation.                                 |
-| Database        | Managed PostgreSQL                               | Transactions, constraints, indexes, backups, and reporting queries are all a natural fit. |
-| Data access     | Drizzle ORM or Prisma                            | Migrations plus typed query boundaries. Pick one; do not mix.                             |
-| Authentication  | A managed auth provider or Better Auth           | Password/session security should not be hand-built.                                       |
-| Background work | Managed queue / worker                           | Exports, reminders, and monthly summaries must not hold up an API request.                |
-| Hosting         | CDN for web + managed container/serverless API   | Independent deploys and simple rollback.                                                  |
-| Monitoring      | Error tracking + structured logs + uptime checks | Know when logging, export, or sync fails before users do.                                 |
+## Application components
 
-## 3. Module boundaries
+### React client
 
-The API is one deployable application but is organized by domain. A route must call a domain service; it must not issue arbitrary database queries itself.
+The client is responsible for:
+
+- the public landing page and budget calculator;
+- registration, sign-in, and sign-out screens;
+- book, entry, category, and filter interfaces;
+- overall and per-book analytics;
+- light and dark themes; and
+- typed API requests with cookie-based sessions.
+
+UI code is divided into pages, layout components, reusable components, modal forms, formatting utilities, and a typed API client.
+
+### Fastify API
+
+The API is responsible for:
+
+- validating request data with Zod;
+- creating and verifying session tokens;
+- enforcing workspace ownership on every private resource;
+- applying book, category, and ledger rules;
+- calculating balances and grouped analytics;
+- generating filtered PDF reports;
+- recording changes in the audit log; and
+- returning a consistent JSON error structure.
+
+Routes are grouped by authentication, dashboards, books, entries, and categories. Shared helpers handle authorization, audit records, database filters, session cookies, and response mapping.
+
+### PostgreSQL
+
+PostgreSQL is the source of truth for financial records. Foreign keys preserve relationships, check constraints validate domain values, unique constraints prevent duplicates, and indexes support the most common book and date-range queries.
+
+Money is stored in integer minor units. For example, ₹125.50 is represented as `12550`, avoiding floating-point rounding errors.
+
+### Render
+
+Render is the cloud application host used by bucks. It runs the Node.js service, serves the web application through Fastify, provides the public HTTPS address, restarts the service when required, and makes application logs available. PostgreSQL remains a separate data service connected to the API over an encrypted connection.
+
+## Repository structure
 
 ```text
-apps/
-  web/                 React UI, route-level data fetching, offline outbox
-  api/
-    auth/              session verification and workspace membership
-    wallets/           wallet CRUD and opening balances
-    ledger/            transaction and transfer rules
-    categories/        defaults and user customisation
-    reports/           read-only aggregation queries
-    exports/           export request and download records
-    shared/            validation, errors, time, money, audit logging
-  worker/              scheduled summaries and exports
-packages/
-  contracts/           request/response schemas shared by client and API
+.
+├── apps/api/
+│   ├── migrations/       PostgreSQL schema changes
+│   ├── scripts/          Database migration runner
+│   ├── src/              Fastify API and domain logic
+│   └── test/             API integration tests
+├── docs/                 System documentation
+├── src/
+│   ├── components/       Reusable React components and forms
+│   ├── layout/           Authenticated application shell
+│   ├── pages/            Landing, calculator, dashboard, and book pages
+│   ├── utils/            Display and formatting helpers
+│   ├── api.ts            Typed browser API client
+│   └── Root.tsx          Application routing and session state
+├── compose.yaml          Local PostgreSQL service
+├── render.yaml           Render service definition
+└── vite.config.ts        Frontend tooling and local API proxy
 ```
 
-The important rule is that **ledger owns money movement**. A report never changes a transaction. A wallet balance is either calculated from ledger movements or maintained as a carefully tested projection; it is never typed manually after creation.
-
-## 4. Data model
-
-All money values are signed integers in the smallest currency unit: `38000` paise means ₹380.00. Never use a floating-point number for money.
+## Data model
 
 ```mermaid
 erDiagram
-  USERS ||--o{ WORKSPACE_MEMBERS : belongs_to
-  WORKSPACES ||--o{ WORKSPACE_MEMBERS : includes
-  WORKSPACES ||--o{ WALLETS : owns
-  WORKSPACES ||--o{ CATEGORIES : customises
-  WALLETS ||--o{ TRANSACTIONS : records
+  USERS ||--o{ WORKSPACES : owns
+  USERS ||--o{ WORKSPACE_MEMBERS : joins
+  WORKSPACES ||--o{ WORKSPACE_MEMBERS : contains
+  WORKSPACES ||--o{ WALLETS : contains
+  WORKSPACES ||--o{ CATEGORIES : defines
+  WORKSPACES ||--o{ TRANSACTIONS : records
+  WALLETS ||--o{ TRANSACTIONS : groups
   CATEGORIES ||--o{ TRANSACTIONS : classifies
-  TRANSACTIONS ||--o{ AUDIT_EVENTS : changes
+  USERS ||--o{ AUDIT_EVENTS : performs
+  WORKSPACES ||--o{ AUDIT_EVENTS : records
 ```
 
-### Required tables
+| Table               | Responsibility                                                   |
+| ------------------- | ---------------------------------------------------------------- |
+| `users`             | Account identity and bcrypt password hash                        |
+| `workspaces`        | Top-level ownership boundary for one user’s data                 |
+| `workspace_members` | User-to-workspace authorization relationship                     |
+| `wallets`           | Books representing cash, bank, card, business, or other accounts |
+| `categories`        | Reusable classifications for both income and expenses            |
+| `transactions`      | Cash-in and cash-out ledger entries                              |
+| `audit_events`      | Before-and-after history for important changes                   |
 
-| Table               | Important fields                                                                                                                                      | Purpose                                                    |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `users`             | `id`, `email`, `created_at`                                                                                                                           | Identity only; delegate password/session storage to auth.  |
-| `workspaces`        | `id`, `name`, `base_currency`, `owner_id`                                                                                                             | Personal space now; shared household/business later.       |
-| `workspace_members` | `workspace_id`, `user_id`, `role`                                                                                                                     | Authorization boundary.                                    |
-| `wallets`           | `id`, `workspace_id`, `name`, `kind`, `opening_balance_minor`, `currency`                                                                             | Cash, bank, card, or virtual wallet.                       |
-| `categories`        | `id`, `workspace_id`, `name`, `kind`, `color`                                                                                                         | Seed global defaults, allow workspace-specific ones.       |
-| `transactions`      | `id`, `workspace_id`, `wallet_id`, `category_id`, `kind`, `amount_minor`, `currency`, `occurred_at`, `note`, `created_at`, `updated_at`, `deleted_at` | Immutable economic record; soft-delete for recovery/audit. |
-| `transaction_links` | `transaction_id`, `counterparty_transaction_id`                                                                                                       | Connects the two legs of a transfer.                       |
-| `audit_events`      | `id`, `workspace_id`, `actor_id`, `entity_type`, `entity_id`, `action`, `before`, `after`, `created_at`                                               | Support, recovery, and security trail.                     |
+The database uses the table name `wallets` for historical migration compatibility, while the interface calls these records books.
 
-Critical indexes: `(workspace_id, occurred_at desc)`, `(workspace_id, wallet_id, occurred_at desc)`, `(workspace_id, category_id, occurred_at desc)`, and partial indexes excluding soft-deleted transactions.
+## Authentication and authorization
 
-## 5. Key request flows
+```mermaid
+sequenceDiagram
+  participant Browser
+  participant API
+  participant Database
 
-### Add an expense
-
-1. Client validates the form immediately and creates an optimistic row with a client-generated UUID.
-2. `POST /v1/workspaces/:workspaceId/transactions` sends an idempotency key and the transaction payload.
-3. API authenticates the session, confirms membership, verifies the wallet/category belong to the workspace, validates amount/currency/date, and writes the transaction plus audit event in one database transaction.
-4. API returns the canonical record. The client replaces its optimistic row.
-5. If offline, the client puts the command into a local outbox and retries with the same idempotency key after reconnecting.
-
-### Monthly dashboard
-
-The report route accepts a date range and wallet/category filters. It reads transaction records and returns:
-
-- total income, total expense, and net movement;
-- daily spending series;
-- spending by category; and
-- recent activity page.
-
-For v1, aggregate in PostgreSQL at read time. Only add materialized daily/monthly rollups if production metrics prove these queries are slow.
-
-## 6. API contract, first release
-
-```text
-POST   /v1/workspaces
-GET    /v1/workspaces/:id/dashboard?from=&to=
-GET    /v1/workspaces/:id/transactions?cursor=&categoryId=&walletId=
-POST   /v1/workspaces/:id/transactions       Idempotency-Key required
-PATCH  /v1/transactions/:id
-DELETE /v1/transactions/:id                   soft delete
-GET    /v1/workspaces/:id/wallets
-POST   /v1/workspaces/:id/wallets
-POST   /v1/workspaces/:id/exports
+  Browser->>API: Register or sign in
+  API->>Database: Find user and verify bcrypt hash
+  API-->>Browser: HttpOnly session cookie
+  Browser->>API: Authenticated request with cookie
+  API->>API: Verify signed session token
+  API->>Database: Confirm workspace membership
+  Database-->>API: Authorized resource
+  API-->>Browser: JSON response
 ```
 
-Use cursor pagination, ISO-8601 timestamps in UTC, explicit request/response schemas, and one error shape: `{ "code": "...", "message": "...", "requestId": "..." }`. Do not leak database models directly in API responses.
+Registration is restricted to an allowlist of at most ten unique email addresses. A serialized database check also limits the total number of accounts to ten.
 
-## 7. Security and privacy baseline
+Passwords are accepted only by the authentication endpoints. They are hashed with bcrypt before storage, excluded from API responses, and redacted from application logs. Session tokens are stored in `HttpOnly`, `SameSite` cookies and authentication responses are marked `no-store`.
 
-Financial data needs a stronger-than-usual baseline even before bank connections exist.
+Every query for a private book, category, entry, or dashboard verifies that the authenticated user belongs to the corresponding workspace. A missing or unauthorized resource is returned as not found, which avoids revealing whether another user owns it.
 
-- Every query that accepts a resource ID must also enforce workspace membership server-side. Broken object-level authorization is a common API risk, so client-side hiding is never a security control. [OWASP API Security guidance](https://owasp.org/www-project-api-security/)
-- Use HTTPS, secure `HttpOnly`/`SameSite` session cookies, CSRF protection for cookie-authenticated state-changing calls, and rate limits on login and export endpoints.
-- Encrypt data in transit and at rest.
-- Log request IDs and security-relevant audit events, but redact notes, session tokens, and raw money data from general logs.
-- Provide account export and deletion workflows; set backups, retention, and restoration drills before launch.
-- Use a least-privilege database role. Secrets belong in the deployment platform’s secret manager, never source control.
+## Ledger flow
 
-## 8. Production readiness gates
+When a user creates an entry:
 
-Do not call the app production-ready until these are true:
+1. The React form validates the visible fields.
+2. The client sends the amount, type, category, date, payment mode, note, and an idempotency key.
+3. The API validates the complete payload and verifies ownership of the selected book and category.
+4. PostgreSQL writes the entry once; the unique idempotency key prevents duplicate submissions.
+5. The API records an audit event and returns the saved entry.
+6. The client reloads the book summary and analytics from the ledger.
 
-- [ ] A user cannot read, write, or delete another workspace’s data (automated authorization tests).
-- [ ] Duplicate submit/retry cannot create duplicate money movements (idempotency test).
-- [ ] Currency, negative amount, future-date, category, and transfer validations are covered.
-- [ ] Database migrations are forward-only, reviewed, and tested on a copy of production data.
-- [ ] Automated daily backups exist and a restore has been performed successfully.
-- [ ] Error tracking, structured logs, uptime checks, and database alarms are live.
-- [ ] CI runs type checks, unit tests, API integration tests, and a browser smoke test.
-- [ ] A staging environment mirrors production configuration without real user data.
-- [ ] Privacy policy, terms, support route, retention policy, and incident runbook are ready.
+Opening balances are represented as system-generated ledger entries. Deleted entries use soft deletion, allowing them to be restored while preserving their history.
 
-## 9. Delivery roadmap
+## Analytics and reporting
 
-### Phase 0 — foundation (week 1)
+Dashboard values are derived from ledger records rather than stored as editable totals. PostgreSQL aggregation queries calculate:
 
-Keep the current Vite app. Add routing, a typed client state boundary, unit tests for money/date helpers, and a component test for creating/deleting an entry. Keep `localStorage` as a demo-only store.
+- current balances;
+- total income and expenses;
+- spending grouped by category;
+- spending grouped by payment mode; and
+- recent activity.
 
-### Phase 1 — trustworthy cloud ledger (weeks 2–3)
+Date, category, entry type, payment mode, and search filters are applied on the server. The same filtered data can be rendered as a PDF report by the API.
 
-Provision staging PostgreSQL. Build authentication, workspaces, wallets, categories, transactions, authorization middleware, migrations, and the dashboard/report endpoint. Move the UI from `localStorage` to the API, retaining a small offline outbox.
+## Local runtime
 
-**Release criterion:** a signed-in user can use two devices without losing or duplicating a transaction.
-
-### Phase 2 — useful finance experience (weeks 4–5)
-
-Add transaction editing, soft-delete/recovery, transfers, wallet balances, budgets, search/filter, and CSV export. Add export jobs and email/download delivery.
-
-**Release criterion:** a user can completely replace a basic spreadsheet for monthly tracking.
-
-### Phase 3 — hardening and beta (weeks 6–7)
-
-Add observability, load testing, backup restore exercise, security review, accessibility review, analytics with privacy controls, feedback/support, onboarding, and staged beta rollout.
-
-**Release criterion:** the production-readiness checklist above is green and the beta has no unresolved data-integrity issue.
-
-### Phase 4 — only after retention proves value
-
-Recurring transactions, shared workspaces, richer reporting, notifications, and bank imports. Treat direct bank connectivity as a separate compliance/security project; do not bolt it into the first public release.
-
-## 10. Decisions needed before implementation
-
-1. Is bucks personal-only at launch, or do we support households/small-business teams from day one?
-2. Is India/INR the only launch market? If yes, design with currency fields anyway, but focus the UX and exports around INR.
-3. Do we need offline-first behavior in the first cloud version, or can sync require connectivity?
-4. Are exports a launch feature or a beta feature?
-
-My recommendation: launch as **personal, INR-first, online-capable with an offline entry outbox, no bank connection**, then expand from verified user behavior.
+During local development, Vite serves the React client, Fastify runs as a separate Node.js process, and Docker Compose runs PostgreSQL. Vite proxies `/v1` API requests to Fastify, allowing the browser client to use the same relative API paths as the hosted application.

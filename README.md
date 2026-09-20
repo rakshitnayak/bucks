@@ -190,12 +190,15 @@ npm run db:down
 ## Architecture
 
 ```text
-React browser application
-          │
-          │ JSON API + secure session cookie
-          ▼
-Fastify API ───────────────► PostgreSQL Docker container
+Browser
+   │ HTTPS
+   ▼
+Render web service
+   ├── React application
+   └── Fastify JSON API ─────────► PostgreSQL
 ```
+
+Fastify serves the compiled React application and the JSON API from the same Render service. During local development, Vite serves React separately and Docker Compose provides PostgreSQL.
 
 The workspace is the authorization boundary. Every book, category, and transaction query is checked against the authenticated user's workspace membership.
 
