@@ -1,8 +1,26 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { app, db } from "../src/server.ts";
+import { app, db, parseAllowedEmails } from "../src/server.ts";
 import { api } from "../../../src/api.ts";
+
+test("allowed emails are normalized, deduplicated, and capped at ten", () => {
+  assert.deepEqual(
+    parseAllowedEmails(
+      " FIRST@example.com ",
+      "second@example.com,first@example.com",
+    ),
+    ["first@example.com", "second@example.com"],
+  );
+  assert.throws(() =>
+    parseAllowedEmails(
+      undefined,
+      Array.from({ length: 11 }, (_, index) => `user${index}@example.com`).join(
+        ",",
+      ),
+    ),
+  );
+});
 
 test("frontend logout sends an empty POST and clears the session cookie", async () => {
   const originalFetch = globalThis.fetch;
@@ -38,13 +56,17 @@ test("frontend logout sends an empty POST and clears the session cookie", async 
 const userEmails: string[] = [];
 async function register() {
   const email = `daybook-test-${randomUUID()}@example.com`;
+  const password = "Integration-password-2026";
   userEmails.push(email);
   const response = await app.inject({
     method: "POST",
     url: "/v1/auth/register",
-    payload: { email, password: "Integration-password-2026" },
+    payload: { email, password },
   });
   assert.equal(response.statusCode, 201);
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.body.includes(password), false);
+  assert.equal(response.body.includes("password"), false);
   return {
     body: response.json<{ workspaceId: string }>(),
     cookie: `${response.cookies[0].name}=${response.cookies[0].value}`,

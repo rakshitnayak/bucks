@@ -13,6 +13,25 @@ import pg, { type PoolClient } from "pg";
 import PDFDocument from "pdfkit";
 import { z, ZodError } from "zod";
 
+const MAX_USERS = 10;
+const emailAddress = z.string().trim().toLowerCase().email().max(254);
+
+export function parseAllowedEmails(...values: Array<string | undefined>) {
+  const uniqueEmails = [
+    ...new Set(
+      values
+        .flatMap((value) => value?.split(",") ?? [])
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  return z
+    .array(emailAddress)
+    .max(MAX_USERS, `At most ${MAX_USERS} email addresses can be allowed.`)
+    .parse(uniqueEmails);
+}
+
 // Runtime configuration and infrastructure.
 const env = z
   .object({
@@ -29,8 +48,14 @@ const env = z
       .default("development"),
     DATABASE_SSL: z.enum(["true", "false"]).optional(),
     ALLOWED_EMAIL: z.string().trim().toLowerCase().email().optional(),
+    ALLOWED_EMAILS: z.string().optional(),
   })
   .parse(process.env);
+const allowedEmails = new Set(
+  parseAllowedEmails(env.ALLOWED_EMAIL, env.ALLOWED_EMAILS),
+);
+if (env.NODE_ENV === "production" && allowedEmails.size === 0)
+  throw new Error("Production requires at least one allowed email address.");
 const useDatabaseSsl =
   env.DATABASE_SSL === "true" ||
   (env.DATABASE_SSL === undefined && env.NODE_ENV === "production");
@@ -46,7 +71,21 @@ const db = new pg.Pool({
   ssl: useDatabaseSsl ? { rejectUnauthorized: false } : undefined,
 });
 const app = Fastify({
-  logger: { redact: ["req.headers.authorization", "req.headers.cookie"] },
+  logger: {
+    redact: {
+      paths: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "req.body.password",
+        "request.body.password",
+        "body.password",
+        "*.password",
+        "DATABASE_PASSWORD",
+        "*.DATABASE_PASSWORD",
+      ],
+      censor: "[REDACTED]",
+    },
+  },
   trustProxy: env.NODE_ENV === "production",
 });
 await app.register(helmet, {
@@ -68,6 +107,11 @@ await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 await app.register(jwt, {
   secret: env.JWT_SECRET,
   cookie: { cookieName: "daybook_session", signed: false },
+});
+app.addHook("onSend", async (request, reply, payload) => {
+  if (request.url.startsWith("/v1/auth/"))
+    reply.header("Cache-Control", "no-store");
+  return payload;
 });
 if (env.NODE_ENV === "production") {
   await app.register(fastifyStatic, {
@@ -93,7 +137,7 @@ const auth = {
 };
 const userOf = (request: FastifyRequest) => request.user as User;
 const credentials = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
+  email: emailAddress,
   password: z.string().min(12).max(128),
 });
 const workspaceParams = z.object({ workspaceId: z.string().uuid() });
@@ -269,7 +313,7 @@ app.post(
   { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
   async (request, reply) => {
     const input = credentials.parse(request.body);
-    if (env.NODE_ENV === "production" && input.email !== env.ALLOWED_EMAIL)
+    if (env.NODE_ENV === "production" && !allowedEmails.has(input.email))
       return reply.code(403).send({
         code: "REGISTRATION_DISABLED",
         message: "Registration is not available for this email.",
@@ -277,6 +321,17 @@ app.post(
     const client = await db.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock($1)", [1_204_225_010]);
+      const userCount = await client.query<{ count: string }>(
+        "SELECT COUNT(*)::text AS count FROM users",
+      );
+      if (Number(userCount.rows[0].count) >= MAX_USERS) {
+        await client.query("ROLLBACK");
+        return reply.code(403).send({
+          code: "USER_LIMIT_REACHED",
+          message: "This private app has reached its account limit.",
+        });
+      }
       const hash = await bcrypt.hash(input.password, 12);
       const users = await client.query<User>(
         "INSERT INTO users(email,password_hash) VALUES($1,$2) RETURNING id,email",
