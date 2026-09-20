@@ -16,7 +16,7 @@ const db = new pg.Pool({
     process.env.DATABASE_SSL === "false"
       ? undefined
       : process.env.NODE_ENV === "production"
-        ? true
+        ? { rejectUnauthorized: false }
         : undefined,
 });
 const directory = new URL("../migrations/", import.meta.url);

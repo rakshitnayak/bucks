@@ -43,7 +43,7 @@ const databaseUrl = env.DATABASE_PASSWORD
 const db = new pg.Pool({
   connectionString: databaseUrl,
   max: 10,
-  ssl: useDatabaseSsl || undefined,
+  ssl: useDatabaseSsl ? { rejectUnauthorized: false } : undefined,
 });
 const app = Fastify({
   logger: { redact: ["req.headers.authorization", "req.headers.cookie"] },
