@@ -4,8 +4,14 @@ import pg from "pg";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL is required");
+const connectionString = process.env.DATABASE_PASSWORD
+  ? url.replace(
+      "[YOUR-PASSWORD]",
+      encodeURIComponent(process.env.DATABASE_PASSWORD),
+    )
+  : url;
 const db = new pg.Pool({
-  connectionString: url,
+  connectionString,
   ssl:
     process.env.DATABASE_SSL === "false"
       ? undefined

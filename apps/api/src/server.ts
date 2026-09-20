@@ -16,7 +16,8 @@ import { z, ZodError } from "zod";
 // Runtime configuration and infrastructure.
 const env = z
   .object({
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z.string().min(1),
+    DATABASE_PASSWORD: z.string().min(1).optional(),
     JWT_SECRET: z.string().min(32),
     WEB_ORIGIN: z
       .string()
@@ -33,8 +34,14 @@ const env = z
 const useDatabaseSsl =
   env.DATABASE_SSL === "true" ||
   (env.DATABASE_SSL === undefined && env.NODE_ENV === "production");
+const databaseUrl = env.DATABASE_PASSWORD
+  ? env.DATABASE_URL.replace(
+      "[YOUR-PASSWORD]",
+      encodeURIComponent(env.DATABASE_PASSWORD),
+    )
+  : env.DATABASE_URL;
 const db = new pg.Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: databaseUrl,
   max: 10,
   ssl: useDatabaseSsl || undefined,
 });
