@@ -136,7 +136,7 @@ sequenceDiagram
   API-->>Browser: JSON response
 ```
 
-Registration is restricted to an allowlist of at most ten unique email addresses. A serialized database check also limits the total number of accounts to ten.
+Anyone can create an account. Registration is rate limited to five attempts per minute per client to reduce automated abuse.
 
 Passwords are accepted only by the authentication endpoints. They are hashed with bcrypt before storage, excluded from API responses, and redacted from application logs. Session tokens are stored in `HttpOnly`, `SameSite` cookies and authentication responses are marked `no-store`.
 

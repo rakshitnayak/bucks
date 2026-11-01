@@ -202,7 +202,7 @@ Fastify serves the compiled React application and the JSON API from the same Ren
 
 The workspace is the authorization boundary. Every book, category, and transaction query is checked against the authenticated user's workspace membership.
 
-Account registration is controlled by an email allowlist with at most ten unique addresses. A separate database check prevents the app from ever creating more than ten accounts, even if that allowlist changes later.
+Anyone can create an account. Registration is rate limited to five attempts per minute per client to reduce automated abuse.
 
 Passwords are accepted only by the authentication endpoints, never returned by the API or written to application logs, and stored only as bcrypt hashes. Authentication responses are marked `no-store`, and sessions use `HttpOnly` cookies.
 

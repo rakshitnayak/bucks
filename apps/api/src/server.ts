@@ -13,24 +13,7 @@ import pg, { type PoolClient } from "pg";
 import PDFDocument from "pdfkit";
 import { z, ZodError } from "zod";
 
-const MAX_USERS = 10;
 const emailAddress = z.string().trim().toLowerCase().email().max(254);
-
-export function parseAllowedEmails(...values: Array<string | undefined>) {
-  const uniqueEmails = [
-    ...new Set(
-      values
-        .flatMap((value) => value?.split(",") ?? [])
-        .map((email) => email.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  ];
-
-  return z
-    .array(emailAddress)
-    .max(MAX_USERS, `At most ${MAX_USERS} email addresses can be allowed.`)
-    .parse(uniqueEmails);
-}
 
 // Runtime configuration and infrastructure.
 const env = z
@@ -47,15 +30,8 @@ const env = z
       .enum(["development", "test", "production"])
       .default("development"),
     DATABASE_SSL: z.enum(["true", "false"]).optional(),
-    ALLOWED_EMAIL: z.string().trim().toLowerCase().email().optional(),
-    ALLOWED_EMAILS: z.string().optional(),
   })
   .parse(process.env);
-const allowedEmails = new Set(
-  parseAllowedEmails(env.ALLOWED_EMAIL, env.ALLOWED_EMAILS),
-);
-if (env.NODE_ENV === "production" && allowedEmails.size === 0)
-  throw new Error("Production requires at least one allowed email address.");
 const useDatabaseSsl =
   env.DATABASE_SSL === "true" ||
   (env.DATABASE_SSL === undefined && env.NODE_ENV === "production");
@@ -313,25 +289,9 @@ app.post(
   { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
   async (request, reply) => {
     const input = credentials.parse(request.body);
-    if (env.NODE_ENV === "production" && !allowedEmails.has(input.email))
-      return reply.code(403).send({
-        code: "REGISTRATION_DISABLED",
-        message: "Registration is not available for this email.",
-      });
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock($1)", [1_204_225_010]);
-      const userCount = await client.query<{ count: string }>(
-        "SELECT COUNT(*)::text AS count FROM users",
-      );
-      if (Number(userCount.rows[0].count) >= MAX_USERS) {
-        await client.query("ROLLBACK");
-        return reply.code(403).send({
-          code: "USER_LIMIT_REACHED",
-          message: "This private app has reached its account limit.",
-        });
-      }
       const hash = await bcrypt.hash(input.password, 12);
       const users = await client.query<User>(
         "INSERT INTO users(email,password_hash) VALUES($1,$2) RETURNING id,email",

@@ -1,26 +1,8 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { app, db, parseAllowedEmails } from "../src/server.ts";
+import { app, db } from "../src/server.ts";
 import { api } from "../../../src/api.ts";
-
-test("allowed emails are normalized, deduplicated, and capped at ten", () => {
-  assert.deepEqual(
-    parseAllowedEmails(
-      " FIRST@example.com ",
-      "second@example.com,first@example.com",
-    ),
-    ["first@example.com", "second@example.com"],
-  );
-  assert.throws(() =>
-    parseAllowedEmails(
-      undefined,
-      Array.from({ length: 11 }, (_, index) => `user${index}@example.com`).join(
-        ",",
-      ),
-    ),
-  );
-});
 
 test("frontend logout sends an empty POST and clears the session cookie", async () => {
   const originalFetch = globalThis.fetch;
