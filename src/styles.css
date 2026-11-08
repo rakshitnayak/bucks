@@ -1,6 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap");
 :root {
-  font-family: "DM Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   color: #252720;
   background: #f4f4ed;
   font-synthesis: none;
@@ -42,7 +43,7 @@ button:disabled {
   align-items: center;
 }
 .brand i {
-  font-family: "DM Serif Display";
+  font-family: var(--font-mono);
   font-size: 22px;
   background: var(--ink);
   color: #f6f6f1;
@@ -153,9 +154,7 @@ header,
 }
 .eyebrow {
   color: #898b81;
-  font:
-    600 10px ui-monospace,
-    monospace;
+  font: 600 10px var(--font-mono);
   letter-spacing: 0.11em;
   margin: 0 0 8px;
 }
@@ -167,7 +166,7 @@ h3 {
 }
 h1,
 h2 {
-  font-family: "DM Serif Display", serif;
+  font-family: var(--font-mono);
   font-weight: 400;
 }
 h1 {
@@ -243,9 +242,7 @@ h3 {
   margin-bottom: 7px;
 }
 .summary-numbers b {
-  font:
-    500 14px ui-monospace,
-    monospace;
+  font: 500 14px var(--font-mono);
 }
 .income {
   color: var(--green) !important;
@@ -349,7 +346,7 @@ h3 {
   text-transform: capitalize;
 }
 .book-open strong {
-  font: 500 17px "DM Serif Display";
+  font: 500 17px var(--font-mono);
 }
 .book-stats {
   display: flex;
@@ -370,9 +367,7 @@ h3 {
   color: var(--muted);
 }
 .book-stats b {
-  font:
-    500 11px ui-monospace,
-    monospace;
+  font: 500 11px var(--font-mono);
   margin-top: 4px;
 }
 .book-card footer {
@@ -522,7 +517,7 @@ h3 {
   margin: 0;
 }
 .metric strong {
-  font: 500 23px "DM Serif Display";
+  font: 500 23px var(--font-mono);
   display: block;
   margin: 12px 0 4px;
 }
@@ -567,9 +562,7 @@ h3 {
   margin-top: 2px;
 }
 .entry-row > strong {
-  font:
-    500 11px ui-monospace,
-    monospace;
+  font: 500 11px var(--font-mono);
 }
 .row-actions {
   display: flex;
@@ -600,7 +593,7 @@ h3 {
   box-shadow: 0 25px 70px #1115;
 }
 .modal h3 {
-  font: 400 27px "DM Serif Display";
+  font: 400 27px var(--font-mono);
 }
 .close {
   border: 0;
