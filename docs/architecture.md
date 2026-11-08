@@ -28,6 +28,8 @@ flowchart LR
 
 The React application and Fastify API share one TypeScript repository. In the hosted application, Fastify also serves the compiled React files. The API connects to PostgreSQL through a pooled connection.
 
+Production migrations run once during the Render deploy build. Service restarts do not rerun migrations, so a temporary database connection failure cannot block the HTTP server from starting. Render checks `/health` for process liveness; `/ready` additionally checks PostgreSQL.
+
 ## Application components
 
 ### React client

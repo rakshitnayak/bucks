@@ -129,6 +129,9 @@ Expected response:
 { "status": "ok" }
 ```
 
+`/health` is a process liveness check used by Render. `/ready` also verifies
+that PostgreSQL is reachable.
+
 ### 7. Start the frontend
 
 In a second terminal:

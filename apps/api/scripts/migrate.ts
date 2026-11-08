@@ -12,6 +12,9 @@ const connectionString = process.env.DATABASE_PASSWORD
   : url;
 const db = new pg.Pool({
   connectionString,
+  connectionTimeoutMillis: 10_000,
+  query_timeout: 30_000,
+  statement_timeout: 30_000,
   ssl:
     process.env.DATABASE_SSL === "false"
       ? undefined

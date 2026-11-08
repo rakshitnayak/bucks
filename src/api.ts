@@ -84,24 +84,35 @@ export type BookData = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const isForm = init?.body instanceof FormData;
-  const response = await fetch(path, {
-    credentials: "include",
-    ...init,
-    headers: {
-      ...(init?.body != null && !isForm
-        ? { "Content-Type": "application/json" }
-        : {}),
-      ...init?.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = await response
-      .json()
-      .catch(() => ({ message: "Request failed." }));
-    throw new Error(body.message ?? "Request failed.");
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), 20_000);
+  try {
+    const response = await fetch(path, {
+      credentials: "include",
+      ...init,
+      signal: init?.signal ?? controller.signal,
+      headers: {
+        ...(init?.body != null && !isForm
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...init?.headers,
+      },
+    });
+    if (!response.ok) {
+      const body = await response
+        .json()
+        .catch(() => ({ message: "Request failed." }));
+      throw new Error(body.message ?? "Request failed.");
+    }
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw new Error("The server took too long to respond. Please try again.");
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
 }
 const query = (values: Record<string, string | undefined>) => {
   const params = new URLSearchParams();

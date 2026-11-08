@@ -44,6 +44,11 @@ const databaseUrl = env.DATABASE_PASSWORD
 const db = new pg.Pool({
   connectionString: databaseUrl,
   max: 10,
+  connectionTimeoutMillis: 10_000,
+  query_timeout: 15_000,
+  statement_timeout: 15_000,
+  idleTimeoutMillis: 30_000,
+  keepAlive: true,
   ssl: useDatabaseSsl ? { rejectUnauthorized: false } : undefined,
 });
 const app = Fastify({
@@ -63,6 +68,9 @@ const app = Fastify({
     },
   },
   trustProxy: env.NODE_ENV === "production",
+});
+db.on("error", (error) => {
+  app.log.error({ err: error }, "Unexpected idle database client error");
 });
 await app.register(helmet, {
   contentSecurityPolicy: {
@@ -1013,7 +1021,8 @@ app.patch("/v1/categories/:categoryId", auth, async (request, reply) => {
   return { updated: true };
 });
 
-app.get("/health", async () => {
+app.get("/health", async () => ({ status: "ok" }));
+app.get("/ready", async () => {
   await db.query("SELECT 1");
   return { status: "ok" };
 });
